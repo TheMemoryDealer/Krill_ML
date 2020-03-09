@@ -7,14 +7,27 @@ from keras.layers import Dropout
 from keras.layers import Flatten
 from keras.layers.convolutional import Conv2D
 from keras.applications.resnet50 import preprocess_input
+from sklearn.metrics import multilabel_confusion_matrix, plot_confusion_matrix
 from keras.layers.convolutional import MaxPooling2D
 from keras.utils import np_utils
 import os
 from PIL import Image
+import tensorflow as tf
 from keras.optimizers import Adam
 import numpy as np
 import csv
+import seaborn as sns
+import pandas as pd
 
+"""
+What I have to do:
+Data augmentation or remove a majority the classes
+Pre-process the data better potentially with padding and removing the background 
+Dont fuck around with training the models constantly, you have a model now and you know the problem is classifier bias towards one set
+All you need to do is just preprocess the data better - this is just common ML practice
+One you have done the above, then test out your changes and see if it can classify things better :)
+#ALL_ABOARD
+"""
 
 store = {}
 
@@ -23,14 +36,17 @@ for filename in os.listdir('Krill_images'):
     image = Image.open('./Krill_images/{}'.format(filename))  # .convert('L')
 
     new_image = image.resize((300, 100))
-
+    # new_image.show()
+    # quit()
     img = np.array(new_image)
     newname = str(filename).replace(".jpg", "")
-
+    # print(newname)
     img = preprocess_input(img)
 
     store[newname] = {}
     store[newname]["img"] = img
+    #if i % 3000 == 0 and i is not 0:
+    #    break
     if i % 500 == 0 and i is not 0:
         print("Completed reading in image", i)
     i += 1
@@ -40,13 +56,15 @@ with open("krill_data_set.csv") as csv_file:
     i = 0
     for row in csv:
         if i == 0:
-            i += 1
+            i += 1 # skip csv header
             continue
         try:
             if str(row[1]) == '' or str(row[1]) == 'U':
+                print(str(row[8]))
                 continue
             store[row[8]]["target"] = str(row[1])
         except:
+            # print(str(row[8]))
             continue
 
 X_train = []
@@ -62,7 +80,6 @@ num_fucks = list(set(labels))
 print(np.shape(X_train))
 print(np.shape(labels))
 print(num_fucks)
-
 y_train = []
 for y in labels:
     category = num_fucks.index(y)
@@ -76,19 +93,24 @@ for y in labels:
 X_train = np.array(X_train)
 y_train = np.array(y_train)
 
-#X_test = X_train[int(len(X_train)-len(X_train)/20):len(X_train)]
-#X_train = X_train[0:int(len(X_train)-len(X_train)/20)]
-#y_test = y_train[int(len(y_train)-len(y_train)/20):len(y_train)]
-#y_train = y_train[0:int(len(y_train)-len(y_train)/20)]
+# density = np.zeros(len(num_fucks))
+# for index in y_train:
+#     density[np.argmax(index)] += 1
 
-X_train = X_train.reshape((X_train.shape[0], 300, 100, 3)).astype('float32')
+# print(len(density), len(num_fucks))
+# plt.bar(num_fucks, density)
+# plt.show()
+# exit()
+X_test = X_train[int(len(X_train)-len(X_train)/20):len(X_train)]
+X_train = X_train[0:int(len(X_train)-len(X_train)/20)]
+y_test = y_train[int(len(y_train)-len(y_train)/20):len(y_train)]
+y_train = y_train[0:int(len(y_train)-len(y_train)/20)]
+
+#X_train = X_train.reshape((X_train.shape[0], 300, 100, 3)).astype('float32')
 #X_test = X_test.reshape((X_test.shape[0], 64, 64, 1)).astype('float32')
-# # print(X_train)
-#X_train = X_train / 255
-#X_test = X_test / 255
-
 
 def baseline_model(lr):
+    """
     model = Sequential()
     model.add(Conv2D(32, (5, 5), input_shape=(90, 30, 3), activation='relu'))
     # model.add(Conv2D(64, (5, 5), input_shape=(64, 64, 3), activation='relu'))
@@ -98,6 +120,24 @@ def baseline_model(lr):
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
     model.add(Dense(256, activation='relu'))
+    model.add(Dense(len(num_fucks), activation='softmax'))
+    model.compile(loss='categorical_crossentropy', metrics=["accuracy"],
+                  optimizer=Adam(lr=lr, decay=1e-6))
+    """
+
+    model = Sequential()
+    model.add(Conv2D(32, (3, 3), activation='relu'))
+    model.add(Conv2D(32, (3, 3), activation='relu'))
+    model.add(Conv2D(32, (3, 3), activation='relu'))
+    model.add(MaxPooling2D())
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(MaxPooling2D())
+    model.add(Dropout(0.2))
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu'))
+    model.add(Dense(128, activation='relu'))
     model.add(Dense(len(num_fucks), activation='softmax'))
     model.compile(loss='categorical_crossentropy', metrics=["accuracy"],
                   optimizer=Adam(lr=lr, decay=1e-6))
@@ -183,13 +223,31 @@ def mnist_fork():
 
 
 def mnist_fork_single():
-    model = densenet()
+    model = baseline_model(0.0001)
     # model = resnet()
     #model = densenet()
 
-    history = model.fit(X_train, y_train, validation_split=0.2,
-                        epochs=300, batch_size=32, shuffle=True)
+    # history = model.fit(X_train, y_train, validation_split=0.2, epochs=50, batch_size=32, shuffle=True)
+    history = model.fit(X_train, y_train,  validation_split=0.2, epochs=100, batch_size=32, shuffle=True)
 
+    predictions = model.predict_classes(X_test)
+    y_targets = [np.argmax(item) for item in y_test]
+
+    cf = multilabel_confusion_matrix(y_targets, predictions)
+
+    con_mat = tf.math.confusion_matrix(labels=y_targets, predictions=predictions).numpy()
+    con_mat_norm = np.around(con_mat.astype('float') / con_mat.sum(axis=1)[:, np.newaxis], decimals=2)
+    con_mat_df = pd.DataFrame(con_mat_norm,
+                        index=num_fucks, 
+                        columns=num_fucks)
+    figure = plt.figure(figsize=(8, 8))
+    sns.heatmap(con_mat_df, annot=True,cmap=plt.cm.Blues)
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
+
+    """
     fig, ax = plt.subplots(ncols=2, nrows=1)
 
     ax[0].plot(history.history['accuracy'], label="training")
@@ -207,6 +265,7 @@ def mnist_fork_single():
     ax[1].legend(loc='upper left')
 
     plt.show()
+    """
 
 
 mnist_fork_single()
