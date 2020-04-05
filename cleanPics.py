@@ -1,4 +1,3 @@
-# Simple CNN for the MNIST Dataset
 import matplotlib.pyplot as plt
 from keras.datasets import mnist
 from keras.models import Sequential
@@ -10,6 +9,7 @@ from keras.applications.resnet50 import preprocess_input
 from sklearn.metrics import multilabel_confusion_matrix, plot_confusion_matrix
 from keras.layers.convolutional import MaxPooling2D
 from keras.utils import np_utils
+import keras
 import os
 from PIL import Image
 import tensorflow as tf
@@ -18,38 +18,35 @@ import numpy as np
 import csv
 import seaborn as sns
 import pandas as pd
+from tensorflow.python.client import device_lib
+import tensorflow as tf
 
-"""
-What I have to do:
-Data augmentation or remove a majority the classes
-Pre-process the data better potentially with padding and removing the background 
-Dont fuck around with training the models constantly, you have a model now and you know the problem is classifier bias towards one set
-All you need to do is just preprocess the data better - this is just common ML practice
-One you have done the above, then test out your changes and see if it can classify things better :)
-#ALL_ABOARD
-"""
 
 store = {}
 
 i = 0
-for filename in os.listdir('Krill_images'):
-    image = Image.open('./Krill_images/{}'.format(filename))  # .convert('L')
+for filename in os.listdir('../Krill_images'):
+    try:
+        image = Image.open('../Krill_images/{}'.format(filename))  # .convert('L')
 
-    new_image = image.resize((300, 100))
-    # new_image.show()
-    # quit()
-    img = np.array(new_image)
-    newname = str(filename).replace(".jpg", "")
-    # print(newname)
-    img = preprocess_input(img)
+        new_image = image.resize((300, 100))
+        # new_image.show()
+        # quit()
+        img = np.array(new_image)
+        newname = str(filename).replace(".jpg", "")
+        # print(newname)
+        img = preprocess_input(img)
 
-    store[newname] = {}
-    store[newname]["img"] = img
-    #if i % 3000 == 0 and i is not 0:
-    #    break
-    if i % 500 == 0 and i is not 0:
-        print("Completed reading in image", i)
-    i += 1
+        store[newname] = {}
+        store[newname]["img"] = img
+        store[newname]["filename"] = filename
+        #if i % 3000 == 0 and i is not 0:
+        #    break
+        if i % 500 == 0 and i is not 0:
+            print("Completed reading in image", i)
+        i += 1
+    except:
+        continue
 
 with open("krill_data_set.csv") as csv_file:
     csv = csv.reader(csv_file, delimiter=',')
@@ -70,16 +67,28 @@ with open("krill_data_set.csv") as csv_file:
 X_train = []
 labels = []
 
+import shutil
+
 for key, value in store.items():
     if "target" not in store[key]:
         continue
     X_train.append(store[key]["img"])
     labels.append(store[key]["target"])
 
+    if os.path.exists("../Krill_images/{}".format(store[key]["target"])):
+        shutil.move("../Krill_images/{}".format(store[key]["filename"]), "../Krill_images/{}/{}".format(store[key]["target"], store[key]["filename"]))
+
 num_fucks = list(set(labels))
 print(np.shape(X_train))
 print(np.shape(labels))
 print(num_fucks)
+print(tf.__version__)
+print(keras.__version__)
+# print(device_lib.list_local_devices())
+# print(tf.test.is_built_with_cuda())
+# print(tf.test.is_gpu_available(cuda_only=False, min_cuda_compute_capability=None))
+# print(device_lib.list_local_devices())
+# exit()
 y_train = []
 for y in labels:
     category = num_fucks.index(y)
@@ -93,14 +102,14 @@ for y in labels:
 X_train = np.array(X_train)
 y_train = np.array(y_train)
 
-# density = np.zeros(len(num_fucks))
-# for index in y_train:
-#     density[np.argmax(index)] += 1
+density = np.zeros(len(num_fucks))
+for index in y_train:
+    density[np.argmax(index)] += 1
 
-# print(len(density), len(num_fucks))
-# plt.bar(num_fucks, density)
-# plt.show()
-# exit()
+print(len(density), len(num_fucks))
+plt.bar(num_fucks, density)
+plt.show()
+exit()
 X_test = X_train[int(len(X_train)-len(X_train)/20):len(X_train)]
 X_train = X_train[0:int(len(X_train)-len(X_train)/20)]
 y_test = y_train[int(len(y_train)-len(y_train)/20):len(y_train)]
