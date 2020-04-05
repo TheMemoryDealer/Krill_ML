@@ -21,7 +21,8 @@ import pandas as pd
 from tensorflow.python.client import device_lib
 import tensorflow as tf
 
-
+"""
+"""
 store = {}
 
 i = 0
